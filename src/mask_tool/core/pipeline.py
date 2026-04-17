@@ -27,8 +27,19 @@ class Pipeline:
         lexicon = lexicon_store.get_lexicon()
         whitelist = lexicon_store.get_whitelist()
 
+        # 初始化NER引擎（如果配置启用）
+        ner_engine = None
+        if config.ner.enabled:
+            try:
+                from mask_tool.core.ner.jieba_ner import JiebaNER
+                ner_engine = JiebaNER()
+                ner_engine.set_whitelist(whitelist)
+            except Exception as e:
+                import logging
+                logging.getLogger("mask_tool").warning(f"NER引擎初始化失败: {e}")
+
         # 初始化各引擎
-        self.detector = Detector(lexicon, whitelist)
+        self.detector = Detector(lexicon, whitelist, ner_engine=ner_engine)
         self.policy = PolicyEngine(config)
         self.token_gen = TokenGenerator()
         self.masker = Masker(self.token_gen, irreversible=False)

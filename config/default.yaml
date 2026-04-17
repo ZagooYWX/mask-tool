@@ -12,10 +12,10 @@ ocr:
   enabled: false
   engine: paddleocr    # paddleocr / tesseract
 
-# NER配置（MVP阶段暂不启用）
+# NER配置
 ner:
-  enabled: false
-  engine: hanlp        # hanlp / spacy
+  enabled: true            # 启用NER智能识别
+  engine: jieba            # jieba（轻量）/ hanlp（高精度，需额外安装）
 
 # 存储配置
 storage:

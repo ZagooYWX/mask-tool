@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "本地文件脱敏工具 - 支持可逆脱敏、智能识别、多格式办公文件处理"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 authors = [
     {name = "ZagooYWX"},
 ]
@@ -29,9 +29,14 @@ dependencies = [
     "python-pptx>=0.6.23",
     "pymupdf>=1.24.0",
     "rich>=13.0.0",
+    "jieba>=0.42.1",
 ]
 
 [project.optional-dependencies]
+ner-hanlp = [
+    "hanlp>=2.1.0",
+    "torch>=2.0.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
