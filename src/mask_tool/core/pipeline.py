@@ -73,17 +73,34 @@ class Pipeline:
         suffix = input_path.suffix.lower()
         self.report.input_files.append(str(input_path))
 
+        # 记录处理前的映射数量，用于计算本文件新增的脱敏项
+        mappings_before = len(self.masker.mappings)
+
         # 根据文件类型选择适配器
         if suffix == ".docx":
-            return self._process_docx(input_path, output_dir)
+            result = self._process_docx(input_path, output_dir)
         elif suffix == ".xlsx":
-            return self._process_xlsx(input_path, output_dir)
+            result = self._process_xlsx(input_path, output_dir)
         elif suffix == ".pptx":
-            return self._process_pptx(input_path, output_dir)
+            result = self._process_pptx(input_path, output_dir)
         elif suffix == ".pdf":
-            return self._process_pdf(input_path, output_dir)
+            result = self._process_pdf(input_path, output_dir)
         else:
             return None
+
+        # 将本文件新增的映射记录到报告
+        from mask_tool.models.detection import DetectionStatus
+        for m in self.masker.mappings[mappings_before:]:
+            self.report.auto_masked.append({
+                "text": m.original,
+                "type": m.text_type.value,
+                "source": "adapter",
+                "confidence": m.confidence,
+                "file": str(input_path),
+                "token": m.token,
+            })
+
+        return result
 
     def _process_docx(self, input_path: Path, output_dir: Path) -> Path:
         """处理Word文档"""
@@ -111,7 +128,12 @@ class Pipeline:
 
     def _process_pdf(self, input_path: Path, output_dir: Path) -> Path:
         """处理PDF文档（MVP: 仅提取文本并生成报告）"""
-        from mask_tool.adapters.pdf_adapter import PdfAdapter
+        try:
+            from mask_tool.adapters.pdf_adapter import PdfAdapter
+        except ImportError:
+            raise RuntimeError(
+                "PDF处理需要安装PyMuPDF: pip install pymupdf"
+            )
         adapter = PdfAdapter(self.detector, self.policy)
         output_path = adapter.process(input_path, output_dir)
         self.report.output_files.append(str(output_path))

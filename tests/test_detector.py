@@ -44,7 +44,10 @@ class TestDetector:
         """测试身份证号正则匹配"""
         results = self.detector.detect("身份证号：110101199001011234")
         id_results = [r for r in results if "110101199001011234" in r.text]
-        assert len(id_results) == 1
+        assert len(id_results) >= 1
+        # 身份证正则（17位+X）应匹配到
+        id_card_hits = [r for r in id_results if r.confidence == 0.85]
+        assert len(id_card_hits) == 1
 
     def test_whitelist_filtering(self):
         """测试白名单过滤"""

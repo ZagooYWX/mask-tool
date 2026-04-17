@@ -3,8 +3,6 @@
 import json
 from pathlib import Path
 
-import fitz  # PyMuPDF
-
 from mask_tool.adapters.base import FileAdapter
 from mask_tool.models.detection import DetectionResult, Location
 
@@ -26,6 +24,8 @@ class PdfAdapter(FileAdapter):
         - 检测敏感信息
         - 输出脱敏报告（不做PDF回写）
         """
+        import fitz  # 延迟导入，避免未安装PyMuPDF时影响其他功能
+
         doc = fitz.open(str(input_path))
         file_name = input_path.stem
         output_path = output_dir / f"{file_name}_masked_report.json"
