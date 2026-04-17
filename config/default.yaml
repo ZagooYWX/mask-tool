@@ -1,0 +1,45 @@
+# 脱敏模式: strict / smart / aggressive
+mode: smart
+
+# 置信度阈值
+thresholds:
+  auto_mask: 0.85      # >= 此值自动脱敏
+  suggest_mask: 0.6    # >= 此值建议脱敏
+  # < 0.6 仅提示
+
+# OCR配置（MVP阶段暂不启用）
+ocr:
+  enabled: false
+  engine: paddleocr    # paddleocr / tesseract
+
+# NER配置（MVP阶段暂不启用）
+ner:
+  enabled: false
+  engine: hanlp        # hanlp / spacy
+
+# 存储配置
+storage:
+  mapping_format: json  # json / sqlite
+  encrypt_mapping: false
+
+# 词库路径
+lexicon_path: config/sample_lexicon.yaml
+
+# 白名单路径
+whitelist_path: config/whitelist.yaml
+
+# 性能配置
+performance:
+  workers: 4
+  max_file_mb: 500
+
+# 脱敏类别（按优先级排序）
+categories:
+  - company
+  - government
+  - person
+  - project
+  - subject
+  - location
+  - amount
+  - custom
