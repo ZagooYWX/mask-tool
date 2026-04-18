@@ -152,7 +152,7 @@ def mask(
 
 @app.command()
 def unmask(
-    input_path: Path = typer.Argument(..., help="脱敏后的文件路径", exists=True),
+    input_path: List[Path] = typer.Argument(..., help="脱敏后的文件或目录路径", exists=True),
     mapping: Path = typer.Option(..., "--mapping", help="映射表文件路径(JSON)", exists=True),
     output: Path = typer.Option("./restored", "--output", "-o", help="输出目录"),
 ) -> None:
@@ -170,22 +170,44 @@ def unmask(
 
     console.print(f"加载了 {len(tokens)} 条映射")
 
-    suffix = input_path.suffix.lower()
-    output.mkdir(parents=True, exist_ok=True)
-    output_path = output / input_path.name
+    # 收集所有文件
+    supported = {".docx", ".xlsx", ".pptx"}
+    files = []
+    for p in input_path:
+        if p.is_file():
+            if p.suffix.lower() in supported:
+                files.append(p)
+        elif p.is_dir():
+            for f in sorted(p.iterdir()):
+                if f.is_file() and f.suffix.lower() in supported:
+                    files.append(f)
 
-    if suffix == ".docx":
-        _unmask_docx(input_path, output_path, tokens)
-    elif suffix == ".xlsx":
-        _unmask_xlsx(input_path, output_path, tokens)
-    elif suffix == ".pptx":
-        _unmask_pptx(input_path, output_path, tokens)
-    else:
-        console.print(f"[yellow]不支持反脱敏的格式: {suffix}[/yellow]")
-        console.print("PDF和图片的反脱敏暂不支持（MVP阶段）")
+    if not files:
+        console.print("[yellow]未找到可处理的文件[/yellow]")
         raise typer.Exit(1)
 
-    console.print(f"[green]反脱敏完成: {output_path}[/green]")
+    console.print(f"找到 {len(files)} 个文件待还原\n")
+    output.mkdir(parents=True, exist_ok=True)
+
+    for f in files:
+        console.print(f"  还原: {f.name} ...", end=" ")
+        try:
+            suffix = f.suffix.lower()
+            output_path = output / f.name
+            if suffix == ".docx":
+                _unmask_docx(f, output_path, tokens)
+            elif suffix == ".xlsx":
+                _unmask_xlsx(f, output_path, tokens)
+            elif suffix == ".pptx":
+                _unmask_pptx(f, output_path, tokens)
+            else:
+                console.print("[yellow]跳过[/yellow]")
+                continue
+            console.print("[green]✓[/green]")
+        except Exception as e:
+            console.print(f"[red]✗ {e}[/red]")
+
+    console.print(f"\n[green]反脱敏完成，输出到: {output}/[/green]")
 
 
 def _unmask_docx(input_path: Path, output_path: Path, tokens: dict) -> None:
