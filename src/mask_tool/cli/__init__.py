@@ -95,10 +95,12 @@ def mask(
     mode: str = typer.Option("smart", "--mode", "-m", help="运行模式: focused/strict/smart/aggressive"),
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="配置文件路径"),
     irreversible: bool = typer.Option(False, "--irreversible", help="使用不可逆脱敏"),
+    confirm: bool = typer.Option(False, "--confirm", help="启用交互式确认模式"),
+    learn: bool = typer.Option(True, "--learn/--no-learn", help="确认时学习到词库（默认开启）"),
 ) -> None:
     """对文件执行脱敏处理"""
     console.print(f"[bold green]mask-tool[/bold green] v{__version__}")
-    console.print(f"模式: {mode} | 不可逆: {irreversible}")
+    console.print(f"模式: {mode} | 不可逆: {irreversible} | 确认: {'开' if confirm else '关'}")
 
     cfg = _load_config(config, mode)
     pipeline = Pipeline(cfg)
@@ -118,22 +120,62 @@ def mask(
 
     console.print(f"找到 {len(files)} 个文件待处理\n")
 
+    # 确认引擎
+    confirm_engine = None
+    if confirm:
+        from mask_tool.core.confirm import ConfirmEngine
+        confirm_engine = ConfirmEngine()
+
     start_time = time.time()
     for f in files:
-        console.print(f"  处理: {f.name} ...", end=" ")
-        try:
-            result_path = pipeline.process_file(f, output)
-            console.print("[green]✓[/green]")
-        except Exception as e:
-            console.print(f"[red]✗ {e}[/red]")
+        if confirm_engine:
+            # 确认模式：先检测，让用户确认，再脱敏
+            console.print(f"[bold]  文件: {f.name}[/bold]")
+            text = _extract_text(f)
+            all_results = pipeline.detector.detect(text, str(f))
+            all_results = pipeline.policy.apply(all_results)
+
+            if not all_results:
+                console.print("    [dim]未检测到敏感信息，跳过[/dim]\n")
+                continue
+
+            # 用户确认
+            confirmed = confirm_engine.confirm_batch(all_results, f.name)
+            if not confirmed:
+                console.print("    [dim]无确认项，跳过脱敏[/dim]\n")
+                continue
+
+            # 只对确认的项执行脱敏
+            pipeline.report.input_files.append(str(f))
+            mappings_before = len(pipeline.masker.mappings)
+
+            # 直接用mask_text处理纯文本（确认模式暂用简化流程）
+            masked_text = pipeline.masker.mask_text(text, confirmed)
+
+            # 写入脱敏文件
+            _write_masked_file(f, output, masked_text, pipeline)
+
+            console.print()
+        else:
+            # 自动模式：原有流程
+            console.print(f"  处理: {f.name} ...", end=" ")
+            try:
+                result_path = pipeline.process_file(f, output)
+                console.print("[green]✓[/green]")
+            except Exception as e:
+                console.print(f"[red]✗ {e}[/red]")
 
     elapsed = time.time() - start_time
     pipeline.report.processing_time_seconds = elapsed
 
+    # 学习机制：将用户确认的词写入词库
+    if confirm_engine and learn and confirm_engine.learned:
+        _save_learned_words(confirm_engine.get_learned_words(), cfg)
+
     # 保存映射表
     mapping_path = output / "mapping.json"
     pipeline.save_mapping(mapping_path)
-    console.print(f"\n映射表: {mapping_path}")
+    console.print(f"映射表: {mapping_path}")
 
     # 保存报告
     report_path = output / "report.json"
@@ -147,6 +189,8 @@ def mask(
     console.print(f"  自动脱敏: {summary['auto_masked_count']} 项")
     console.print(f"  建议脱敏: {summary['suggested_count']} 项")
     console.print(f"  仅提示: {summary['hint_count']} 项")
+    if confirm_engine and confirm_engine.learned:
+        console.print(f"  新学词: {len(confirm_engine.learned)} 个")
     console.print(f"  耗时: {elapsed:.2f}s")
 
 
@@ -356,6 +400,104 @@ def _extract_text(file_path: Path) -> str:
         doc.close()
         return "\n".join(texts)
     return ""
+
+
+def _write_masked_file(
+    input_path: Path,
+    output_dir: Path,
+    masked_text: str,
+    pipeline,
+) -> Path:
+    """将脱敏后的文本写入文件（确认模式的简化版文件输出）"""
+    from mask_tool.models.detection import DetectionStatus
+
+    suffix = input_path.suffix.lower()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{input_path.stem}_masked{suffix}"
+
+    if suffix == ".docx":
+        from docx import Document
+        doc = Document(str(input_path))
+        for paragraph in doc.paragraphs:
+            for run in paragraph.runs:
+                for m in pipeline.masker.get_mappings():
+                    if m.token in run.text:
+                        run.text = run.text.replace(m.token, m.token)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        for run in paragraph.runs:
+                            for m in pipeline.masker.get_mappings():
+                                if m.token in run.text:
+                                    run.text = run.text.replace(m.token, m.token)
+        doc.save(str(output_path))
+    elif suffix == ".xlsx":
+        from openpyxl import load_workbook
+        wb = load_workbook(str(input_path))
+        for sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if cell.value and isinstance(cell.value, str):
+                        for m in pipeline.masker.get_mappings():
+                            if m.token in cell.value:
+                                cell.value = cell.value.replace(m.token, m.token)
+        wb.save(str(output_path))
+    elif suffix == ".pptx":
+        from pptx import Presentation
+        prs = Presentation(str(input_path))
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for para in shape.text_frame.paragraphs:
+                        for run in para.runs:
+                            for m in pipeline.masker.get_mappings():
+                                if m.token in run.text:
+                                    run.text = run.text.replace(m.token, m.token)
+        prs.save(str(output_path))
+    else:
+        # 其他格式：直接写纯文本
+        output_path.write_text(masked_text, encoding="utf-8")
+
+    pipeline.report.output_files.append(str(output_path))
+    console.print(f"    [green]✓ 已保存: {output_path.name}[/green]")
+    return output_path
+
+
+def _save_learned_words(
+    learned: dict,
+    config: MaskConfig,
+) -> None:
+    """将学习到的词追加到词库文件"""
+    import yaml
+    from pathlib import Path
+
+    lexicon_path = Path(config.lexicon_path)
+    if not lexicon_path.exists():
+        console.print("  [yellow]词库文件不存在，跳过学习写入[/yellow]")
+        return
+
+    # 加载现有词库
+    with open(lexicon_path, "r", encoding="utf-8") as f:
+        existing = yaml.safe_load(f) or {}
+
+    # 合并新词
+    new_count = 0
+    for category, words in learned.items():
+        if category not in existing:
+            existing[category] = []
+        for word in words:
+            if word not in existing[category]:
+                existing[category].append(word)
+                new_count += 1
+
+    if new_count > 0:
+        with open(lexicon_path, "w", encoding="utf-8") as f:
+            yaml.dump(existing, f, allow_unicode=True, default_flow_style=False)
+        console.print(f"  [blue]✓ {new_count} 个新词已写入词库: {lexicon_path}[/blue]")
+    else:
+        console.print("  [dim]所有词已存在于词库中，无需更新[/dim]")
 
 
 @app.command("config")
