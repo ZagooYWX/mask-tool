@@ -31,8 +31,15 @@ class PolicyEngine:
         conf = result.confidence
         mode = self.config.mode
 
-        if mode == "strict":
-            # strict模式：仅词库匹配（高置信度）自动脱敏
+        if mode == "focused":
+            # focused模式：仅脱敏词库匹配（0.95），NER和正则仅提示
+            # 适合只关注核心实体的场景
+            if conf >= 0.95:
+                return DetectionStatus.AUTO_MASK
+            return DetectionStatus.HINT_ONLY
+
+        elif mode == "strict":
+            # strict模式：仅高置信度自动脱敏
             if conf >= 0.95:
                 return DetectionStatus.AUTO_MASK
             elif conf >= 0.85:

@@ -92,7 +92,7 @@ def _print_detection_table(results: list) -> None:
 def mask(
     input_path: List[Path] = typer.Argument(..., help="输入文件或目录路径", exists=True),
     output: Path = typer.Option("./output", "--output", "-o", help="输出目录"),
-    mode: str = typer.Option("smart", "--mode", "-m", help="运行模式: strict/smart/aggressive"),
+    mode: str = typer.Option("smart", "--mode", "-m", help="运行模式: focused/strict/smart/aggressive"),
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="配置文件路径"),
     irreversible: bool = typer.Option(False, "--irreversible", help="使用不可逆脱敏"),
 ) -> None:
@@ -276,7 +276,7 @@ def _unmask_pptx(input_path: Path, output_path: Path, tokens: dict) -> None:
 def inspect(
     input_path: List[Path] = typer.Argument(..., help="输入文件或目录路径", exists=True),
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="配置文件路径"),
-    mode: str = typer.Option("smart", "--mode", "-m", help="运行模式: strict/smart/aggressive"),
+    mode: str = typer.Option("smart", "--mode", "-m", help="运行模式: focused/strict/smart/aggressive"),
 ) -> None:
     """检测文件中的敏感信息（不执行脱敏）"""
     console.print(f"[bold green]mask-tool[/bold green] v{__version__}")
