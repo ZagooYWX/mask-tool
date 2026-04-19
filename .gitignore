@@ -34,3 +34,4 @@ Thumbs.db
 
 # Config (user's local config may differ)
 config/local_*.yaml
+samples/
