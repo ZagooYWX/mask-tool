@@ -408,29 +408,34 @@ def _write_masked_file(
     masked_text: str,
     pipeline,
 ) -> Path:
-    """将脱敏后的文本写入文件（确认模式的简化版文件输出）"""
-    from mask_tool.models.detection import DetectionStatus
+    """将脱敏后的文本写入文件（确认模式的简化版文件输出）
 
+    注意：调用此函数前，pipeline.masker.mask_text() 必须已被调用过，
+    以确保 mappings 中已有 original -> token 的映射关系。
+    """
     suffix = input_path.suffix.lower()
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{input_path.stem}_masked{suffix}"
+
+    # 构建 original -> token 替换映射
+    replace_map = {m.original: m.token for m in pipeline.masker.get_mappings()}
 
     if suffix == ".docx":
         from docx import Document
         doc = Document(str(input_path))
         for paragraph in doc.paragraphs:
             for run in paragraph.runs:
-                for m in pipeline.masker.get_mappings():
-                    if m.token in run.text:
-                        run.text = run.text.replace(m.token, m.token)
+                for original, token in replace_map.items():
+                    if original in run.text:
+                        run.text = run.text.replace(original, token)
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
                         for run in paragraph.runs:
-                            for m in pipeline.masker.get_mappings():
-                                if m.token in run.text:
-                                    run.text = run.text.replace(m.token, m.token)
+                            for original, token in replace_map.items():
+                                if original in run.text:
+                                    run.text = run.text.replace(original, token)
         doc.save(str(output_path))
     elif suffix == ".xlsx":
         from openpyxl import load_workbook
@@ -440,9 +445,9 @@ def _write_masked_file(
             for row in sheet.iter_rows():
                 for cell in row:
                     if cell.value and isinstance(cell.value, str):
-                        for m in pipeline.masker.get_mappings():
-                            if m.token in cell.value:
-                                cell.value = cell.value.replace(m.token, m.token)
+                        for original, token in replace_map.items():
+                            if original in cell.value:
+                                cell.value = cell.value.replace(original, token)
         wb.save(str(output_path))
     elif suffix == ".pptx":
         from pptx import Presentation
@@ -452,9 +457,9 @@ def _write_masked_file(
                 if shape.has_text_frame:
                     for para in shape.text_frame.paragraphs:
                         for run in para.runs:
-                            for m in pipeline.masker.get_mappings():
-                                if m.token in run.text:
-                                    run.text = run.text.replace(m.token, m.token)
+                            for original, token in replace_map.items():
+                                if original in run.text:
+                                    run.text = run.text.replace(original, token)
         prs.save(str(output_path))
     else:
         # 其他格式：直接写纯文本

@@ -30,9 +30,15 @@ dependencies = [
     "pymupdf>=1.24.0",
     "rich>=13.0.0",
     "jieba>=0.42.1",
+    "streamlit>=1.28.0",
+    "pandas>=1.4.0",
 ]
 
 [project.optional-dependencies]
+web = [
+    "streamlit>=1.28.0",
+    "pandas>=1.4.0",
+]
 ner-hanlp = [
     "hanlp>=2.1.0",
     "torch>=2.0.0",
@@ -44,6 +50,7 @@ dev = [
 
 [project.scripts]
 mask-tool = "mask_tool.cli.app:app"
+mask-tool-web = "mask_tool.web.app:run_web"
 
 [tool.setuptools.packages.find]
 where = ["src"]
