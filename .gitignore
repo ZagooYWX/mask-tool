@@ -34,7 +34,13 @@ Thumbs.db
 
 # Config (user's local config may differ)
 config/local_*.yaml
-samples/
+config/lexicon.yaml          # 用户自定义词库（不要提交到GitHub）
+config/whitelist_local.yaml  # 用户自定义白名单
+
+# User data
 samples/
 output/
 restored/
+
+# mask-tool runtime data
+.mask-tool/                  # 批次历史、运行时数据
