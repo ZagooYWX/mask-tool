@@ -316,10 +316,11 @@ def _confidence_class(confidence: float) -> str:
 
 
 def _load_config(mode: str, config_path: Optional[str] = None) -> MaskConfig:
-    """加载配置"""
+    """加载配置，如果用户词库不存在则从示例词库复制"""
     if config_path and Path(config_path).exists():
         cfg = MaskConfig.from_yaml(Path(config_path))
         cfg.mode = mode
+        _ensure_lexicon_exists(cfg)
         return cfg
 
     # 尝试默认配置路径
@@ -331,9 +332,20 @@ def _load_config(mode: str, config_path: Optional[str] = None) -> MaskConfig:
         if p.exists():
             cfg = MaskConfig.from_yaml(p)
             cfg.mode = mode
+            _ensure_lexicon_exists(cfg)
             return cfg
 
     return MaskConfig(mode=mode)
+
+
+def _ensure_lexicon_exists(cfg: MaskConfig) -> None:
+    """如果用户词库文件不存在，从示例词库复制"""
+    lexicon_path = Path(cfg.lexicon_path)
+    if not lexicon_path.exists():
+        sample_path = Path("config/sample_lexicon.yaml")
+        if sample_path.exists():
+            lexicon_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(sample_path, lexicon_path)
 
 
 def _dedup_results(results: List[DetectionResult]) -> List[DetectionResult]:
@@ -667,6 +679,18 @@ def render_sidebar():
         else:
             st.caption("词库未加载")
 
+        # 批量导入词库
+        with st.expander("📥 批量导入词条", expanded=False):
+            st.caption("支持 YAML 或 TXT 格式")
+            import_file = st.file_uploader(
+                "选择词库文件",
+                type=["yaml", "yml", "txt"],
+                key="lexicon_upload",
+                label_visibility="collapsed",
+            )
+            if import_file:
+                _import_lexicon(import_file)
+
         st.markdown("---")
         st.caption("mask-tool · MIT License")
 
@@ -674,10 +698,13 @@ def render_sidebar():
 
 
 def _get_lexicon_info() -> Optional[dict]:
-    """获取词库统计信息"""
+    """获取词库统计信息（优先读取用户词库 lexicon.yaml）"""
     try:
+        # 按优先级查找词库文件
         config_paths = [
+            Path("config/lexicon.yaml"),
             Path("config/sample_lexicon.yaml"),
+            Path(__file__).parent.parent.parent / "config" / "lexicon.yaml",
             Path(__file__).parent.parent.parent / "config" / "sample_lexicon.yaml",
         ]
         for p in config_paths:
@@ -685,10 +712,95 @@ def _get_lexicon_info() -> Optional[dict]:
                 with open(p, "r", encoding="utf-8") as f:
                     data = yaml.safe_load(f) or {}
                 categories = {k: len(v) for k, v in data.items() if isinstance(v, list)}
-                return {"total": sum(categories.values()), "categories": categories}
+                return {
+                    "total": sum(categories.values()),
+                    "categories": categories,
+                    "path": str(p),
+                }
     except Exception:
         pass
     return None
+
+
+def _import_lexicon(uploaded_file) -> None:
+    """从上传的文件批量导入词条到用户词库
+
+    支持格式：
+    - YAML: 与 sample_lexicon.yaml 相同格式（{category: [word1, word2, ...]}）
+    - TXT: 每行一个词条，格式为 "类别:词条" 或纯词条（默认归入 custom）
+    """
+    import io
+
+    # 确定用户词库路径
+    lexicon_path = Path("config/lexicon.yaml")
+    if not lexicon_path.exists():
+        # 从示例词库复制
+        sample_path = Path("config/sample_lexicon.yaml")
+        if sample_path.exists():
+            shutil.copy2(sample_path, lexicon_path)
+        else:
+            lexicon_path.write_text("", encoding="utf-8")
+
+    # 读取现有词库
+    with open(lexicon_path, "r", encoding="utf-8") as f:
+        existing = yaml.safe_load(f) or {}
+
+    # 确保所有类别键存在
+    valid_categories = [t.value for t in DetectionType]
+    for cat in valid_categories:
+        if cat not in existing:
+            existing[cat] = []
+
+    filename = uploaded_file.name.lower()
+    added_count = 0
+
+    if filename.endswith((".yaml", ".yml")):
+        # YAML 格式导入
+        content = uploaded_file.read().decode("utf-8")
+        new_data = yaml.safe_load(content)
+        if isinstance(new_data, dict):
+            for cat, words in new_data.items():
+                if isinstance(words, list) and cat in valid_categories:
+                    for word in words:
+                        if isinstance(word, str) and word.strip() and word not in existing[cat]:
+                            existing[cat].append(word.strip())
+                            added_count += 1
+                elif isinstance(words, list):
+                    # 未知类别，归入 custom
+                    for word in words:
+                        if isinstance(word, str) and word.strip() and word not in existing["custom"]:
+                            existing["custom"].append(word.strip())
+                            added_count += 1
+
+    elif filename.endswith(".txt"):
+        # TXT 格式导入：每行一个词条
+        content = uploaded_file.read().decode("utf-8")
+        for line in content.strip().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if ":" in line:
+                # 格式：类别:词条
+                cat, word = line.split(":", 1)
+                cat = cat.strip().lower()
+                word = word.strip()
+                if cat in valid_categories and word:
+                    if word not in existing[cat]:
+                        existing[cat].append(word)
+                        added_count += 1
+            else:
+                # 纯词条，归入 custom
+                if line not in existing["custom"]:
+                    existing["custom"].append(line)
+                    added_count += 1
+
+    # 保存
+    if added_count > 0:
+        with open(lexicon_path, "w", encoding="utf-8") as f:
+            yaml.dump(existing, f, allow_unicode=True, default_flow_style=False)
+        st.success(f"✅ 成功导入 {added_count} 条新词条到词库")
+    else:
+        st.info("ℹ️ 没有新词条需要导入（全部已存在）")
 
 
 # ──────────────────────────────────────────────

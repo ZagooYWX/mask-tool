@@ -23,7 +23,10 @@ storage:
   encrypt_mapping: false
 
 # 词库路径
-lexicon_path: config/sample_lexicon.yaml
+# sample_lexicon.yaml 是随项目分发的通用示例词库
+# lexicon.yaml 是用户自定义词库（不会提交到GitHub）
+# 如果 lexicon.yaml 不存在，自动从 sample_lexicon.yaml 复制创建
+lexicon_path: config/lexicon.yaml
 
 # 白名单路径
 whitelist_path: config/whitelist.yaml
