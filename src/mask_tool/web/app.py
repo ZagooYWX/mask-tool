@@ -1207,18 +1207,20 @@ def _render_masking_tab(mode: str, ner_enabled: bool, irreversible: bool, learn_
         # 构建 AgGrid 配置
         gb = GridOptionsBuilder.from_dataframe(df_display)
         gb.configure_column("index", hide=True)
-        gb.configure_column("选择", headerCheckboxSelection=True, editable=True)
+        gb.configure_column("选择", header_checkbox_selection=True, editable=True)
         gb.configure_column("敏感信息", editable=False)
         gb.configure_column("类别", editable=False)
         gb.configure_column("来源", editable=False)
-        gb.configure_column("置信度", editable=False, type=["numericColumn"], precisionFormat=2)
+        gb.configure_column("置信度", editable=False, type=["numericColumn"], precision_format=2)
         gb.configure_column("处置", editable=False)
         gb.configure_column("文件", editable=False)
         gb.configure_column("上下文", editable=False)
-        gb.configure_selection(selectionMode="multiple", useCheckbox=True, preSelectedRows=[
-            j for j, row in enumerate(display_rows) if row["选择"]
-        ])
-        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=30)
+        gb.configure_selection(
+            selection_mode="multiple",
+            use_checkbox=True,
+            pre_selected_rows=[j for j, row in enumerate(display_rows) if row["选择"]],
+        )
+        gb.configure_pagination(pagination_auto_page_size=False, pagination_page_size=30)
         gridOptions = gb.build()
 
         # 渲染 AgGrid（fit_column=True 自动列宽）
