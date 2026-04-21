@@ -674,10 +674,48 @@ def render_sidebar():
         lexicon_info = _get_lexicon_info()
         if lexicon_info:
             st.metric("词库词条", lexicon_info["total"])
-            for cat, count in sorted(lexicon_info["categories"].items(), key=lambda x: -x[1]):
-                st.caption(f"  {TYPE_LABELS.get(DetectionType(cat), cat)}: {count} 条")
+
+            # 2.1: 每个类别可展开查看明细
+            lexicon_data = _get_lexicon_data()
+            if lexicon_data:
+                for cat in sorted(lexicon_data.keys(), key=lambda c: -len(lexicon_data[c])):
+                    label = TYPE_LABELS.get(DetectionType(cat), cat)
+                    count = len(lexicon_data[cat])
+                    with st.expander(f"{label}: {count} 条"):
+                        for word in lexicon_data[cat]:
+                            st.code(word)
         else:
             st.caption("词库未加载")
+
+        # 2.2: 手动录入词条
+        with st.expander("✏️ 手动录入词条", expanded=False):
+            valid_categories = {t.value: TYPE_LABELS.get(t, t.value) for t in DetectionType}
+            col_cat, col_word = st.columns([1, 2])
+            with col_cat:
+                input_cat = st.selectbox(
+                    "类别",
+                    options=list(valid_categories.keys()),
+                    format_func=lambda x: valid_categories[x],
+                    key="manual_cat",
+                    label_visibility="collapsed",
+                )
+            with col_word:
+                input_words = st.text_area(
+                    "词条（多条用逗号或换行分隔）",
+                    placeholder="输入词条，多条用逗号或换行分隔...",
+                    key="manual_words",
+                    label_visibility="collapsed",
+                    height=70,
+                )
+            # "其他"类别：允许自定义
+            if input_cat == "custom":
+                custom_cat_name = st.text_input(
+                    "自定义类别名称（留空则归入 custom）",
+                    key="custom_cat_name",
+                    placeholder="如：brand, department...",
+                )
+            if st.button("➕ 添加到词库", use_container_width=True, key="add_words_btn"):
+                _add_words_to_lexicon(input_cat, input_words, custom_cat_name if input_cat == "custom" else None)
 
         # 批量导入词库
         with st.expander("📥 批量导入词条", expanded=False):
@@ -695,6 +733,78 @@ def render_sidebar():
         st.caption("mask-tool · MIT License")
 
     return mode, ner_enabled, irreversible, learn_words
+
+
+def _get_lexicon_data() -> Optional[Dict[str, List[str]]]:
+    """读取词库完整数据（分类别返回词条列表）"""
+    try:
+        config_paths = [
+            Path("config/lexicon.yaml"),
+            Path("config/sample_lexicon.yaml"),
+            Path(__file__).parent.parent.parent / "config" / "lexicon.yaml",
+            Path(__file__).parent.parent.parent / "config" / "sample_lexicon.yaml",
+        ]
+        for p in config_paths:
+            if p.exists():
+                with open(p, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
+                return {k: v for k, v in data.items() if isinstance(v, list)}
+    except Exception:
+        pass
+    return None
+
+
+def _add_words_to_lexicon(category: str, words_text: str, custom_category: Optional[str] = None) -> None:
+    """手动添加词条到用户词库"""
+    if not words_text or not words_text.strip():
+        st.warning("请输入词条内容")
+        return
+
+    # 确定实际类别
+    actual_cat = custom_category.strip() if custom_category and custom_category.strip() else category
+
+    # 解析词条（支持逗号、中文逗号、换行分隔）
+    words = []
+    for part in words_text.replace("，", ",").replace("\n", ",").split(","):
+        w = part.strip()
+        if w:
+            words.append(w)
+
+    if not words:
+        st.warning("未识别到有效词条")
+        return
+
+    # 确保用户词库存在
+    lexicon_path = Path("config/lexicon.yaml")
+    if not lexicon_path.exists():
+        sample_path = Path("config/sample_lexicon.yaml")
+        if sample_path.exists():
+            shutil.copy2(sample_path, lexicon_path)
+        else:
+            lexicon_path.write_text("", encoding="utf-8")
+
+    # 读取现有词库
+    with open(lexicon_path, "r", encoding="utf-8") as f:
+        existing = yaml.safe_load(f) or {}
+
+    # 确保类别存在
+    if actual_cat not in existing:
+        existing[actual_cat] = []
+
+    # 添加新词条（去重）
+    added = 0
+    for word in words:
+        if word not in existing[actual_cat]:
+            existing[actual_cat].append(word)
+            added += 1
+
+    # 保存
+    if added > 0:
+        with open(lexicon_path, "w", encoding="utf-8") as f:
+            yaml.dump(existing, f, allow_unicode=True, default_flow_style=False)
+        st.success(f"✅ 成功添加 {added} 条词条到 [{actual_cat}]")
+    else:
+        st.info("ℹ️ 所有词条已存在于词库中")
 
 
 def _get_lexicon_info() -> Optional[dict]:
@@ -1073,13 +1183,15 @@ def _render_masking_tab(mode: str, ner_enabled: bool, irreversible: bool, learn_
     )
     st.caption(f"当前显示 {len(filtered_indices)} 项，已选中 **{selected_count}** 项")
 
-    # 检测结果表格（使用固定高度容器，避免勾选时滚动跳转）
+    # 检测结果表格（使用 AgGrid，勾选不触发 rerun）
     if filtered_indices:
-        # 使用 data_editor 实现交互式勾选
+        from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
         display_rows = []
         for i in filtered_indices:
             r = all_results[i]
             display_rows.append({
+                "index": i,
                 "选择": st.session_state["user_selections"].get(i, False),
                 "敏感信息": r.text,
                 "类别": TYPE_LABELS.get(r.text_type, r.text_type.value),
@@ -1092,33 +1204,55 @@ def _render_masking_tab(mode: str, ner_enabled: bool, irreversible: bool, learn_
 
         df_display = pd.DataFrame(display_rows)
 
-        # 使用固定高度容器包裹 data_editor，避免勾选时页面滚动
-        editor_container = st.container(height=500)
-        with editor_container:
-            edited = st.data_editor(
-                df_display,
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "选择": st.column_config.CheckboxColumn("选择", width="small"),
-                    "敏感信息": st.column_config.TextColumn("敏感信息", width="medium"),
-                    "类别": st.column_config.TextColumn("类别", width="small"),
-                    "来源": st.column_config.TextColumn("来源", width="small"),
-                    "置信度": st.column_config.NumberColumn(
-                        "置信度", format="%.2f", width="small"
-                    ),
-                    "处置": st.column_config.TextColumn("处置", width="small"),
-                    "文件": st.column_config.TextColumn("文件", width="small"),
-                    "上下文": st.column_config.TextColumn("上下文", width="large"),
-                },
-                disabled=["敏感信息", "类别", "来源", "置信度", "处置", "文件", "上下文"],
-            )
+        # 构建 AgGrid 配置
+        gb = GridOptionsBuilder.from_dataframe(df_display)
+        gb.configure_column("index", hide=True)
+        gb.configure_column("选择", headerCheckboxSelection=True, editable=True)
+        gb.configure_column("敏感信息", editable=False)
+        gb.configure_column("类别", editable=False)
+        gb.configure_column("来源", editable=False)
+        gb.configure_column("置信度", editable=False, type=["numericColumn"], precisionFormat=2)
+        gb.configure_column("处置", editable=False)
+        gb.configure_column("文件", editable=False)
+        gb.configure_column("上下文", editable=False)
+        gb.configure_selection(selectionMode="multiple", useCheckbox=True, preSelectedRows=[
+            j for j, row in enumerate(display_rows) if row["选择"]
+        ])
+        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=30)
+        gridOptions = gb.build()
 
-        # 同步选择状态（不触发 rerun，避免滚动跳转）
-        for j, i in enumerate(filtered_indices):
-            new_val = bool(edited.iloc[j]["选择"])
-            if st.session_state["user_selections"].get(i) != new_val:
-                st.session_state["user_selections"][i] = new_val
+        # 渲染 AgGrid（fit_column=True 自动列宽）
+        grid_response = AgGrid(
+            df_display,
+            gridOptions=gridOptions,
+            update_mode=GridUpdateMode.NO_UPDATE,
+            fit_columns_on_grid_load=True,
+            height=500,
+            allow_unsafe_jscode=True,
+            theme="streamlit",
+        )
+
+        # 从 AgGrid 响应中同步选择状态
+        selected_rows = grid_response.get("selected_rows")
+        if selected_rows is not None:
+            selected_indices_in_grid = set()
+            for row in selected_rows:
+                idx = int(row.get("index", -1))
+                if idx >= 0:
+                    selected_indices_in_grid.add(idx)
+            # 更新 session_state
+            changed = False
+            for i in filtered_indices:
+                new_val = i in selected_indices_in_grid
+                if st.session_state["user_selections"].get(i) != new_val:
+                    st.session_state["user_selections"][i] = new_val
+                    changed = True
+            # 如果选择状态有变化，更新计数显示（不 rerun 整个页面）
+            if changed:
+                selected_count = sum(
+                    1 for i in filtered_indices if st.session_state["user_selections"].get(i, False)
+                )
+                st.caption(f"当前显示 {len(filtered_indices)} 项，已选中 **{selected_count}** 项")
 
     # ── Step 4: 执行脱敏 ──
     st.markdown("---")
