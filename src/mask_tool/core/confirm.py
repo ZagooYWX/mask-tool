@@ -160,7 +160,7 @@ class ConfirmEngine:
         获取学习到的词，按类别分组
 
         Returns:
-            {"company": ["国开行", ...], "location": ["霍尔果斯", ...], ...}
+            {"company": ["某某公司", ...], "location": ["某市", ...], ...}
         """
         grouped: Dict[str, List[str]] = {}
         for text, category in self.learned:

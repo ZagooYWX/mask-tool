@@ -17,7 +17,7 @@ class TestTokenGenerator:
 
     def test_generate_person_token(self):
         """测试人名类Token生成"""
-        token = self.gen.generate("张三", DetectionType.PERSON)
+        token = self.gen.generate("某人甲", DetectionType.PERSON)
         assert token == "[PERSON_001]"
 
     def test_incrementing(self):
@@ -29,14 +29,14 @@ class TestTokenGenerator:
 
     def test_same_text_same_token(self):
         """测试同一原文返回相同Token"""
-        t1 = self.gen.generate("张三", DetectionType.PERSON)
-        t2 = self.gen.generate("张三", DetectionType.PERSON)
+        t1 = self.gen.generate("某人甲", DetectionType.PERSON)
+        t2 = self.gen.generate("某人甲", DetectionType.PERSON)
         assert t1 == t2
 
     def test_independent_counters(self):
         """测试不同类别独立计数"""
         t1 = self.gen.generate("公司A", DetectionType.COMPANY)
-        t2 = self.gen.generate("张三", DetectionType.PERSON)
+        t2 = self.gen.generate("某人甲", DetectionType.PERSON)
         t3 = self.gen.generate("公司B", DetectionType.COMPANY)
         assert t1 == "[COMPANY_001]"
         assert t2 == "[PERSON_001]"
@@ -45,9 +45,9 @@ class TestTokenGenerator:
     def test_get_all_mappings(self):
         """测试获取所有映射"""
         self.gen.generate("公司A", DetectionType.COMPANY)
-        self.gen.generate("张三", DetectionType.PERSON)
+        self.gen.generate("某人甲", DetectionType.PERSON)
         mappings = self.gen.get_all_mappings()
-        assert mappings == {"公司A": "[COMPANY_001]", "张三": "[PERSON_001]"}
+        assert mappings == {"公司A": "[COMPANY_001]", "某人甲": "[PERSON_001]"}
 
     def test_reset(self):
         """测试重置"""

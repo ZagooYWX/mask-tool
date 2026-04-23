@@ -16,34 +16,34 @@ class TestJiebaNER:
 
     def test_person_detection(self):
         """测试人名识别"""
-        results = self.ner.recognize("项目负责人张三负责此事")
+        results = self.ner.recognize("项目负责人某人甲负责此事")
         persons = [r for r in results if r.text_type == DetectionType.PERSON]
         assert len(persons) >= 1
-        assert "张三" in [p.text for p in persons]
+        assert "某人甲" in [p.text for p in persons]
 
     def test_location_detection(self):
         """测试地名识别"""
-        results = self.ner.recognize("阜新市位于辽宁省西部")
+        results = self.ner.recognize("某市位于某省西部")
         locations = [r for r in results if r.text_type == DetectionType.LOCATION]
         assert len(locations) >= 1
         texts = [l.text for l in locations]
-        assert any("阜新" in t or "辽宁" in t for t in texts)
+        assert any("某" in t or "省" in t for t in texts)
 
     def test_organization_detection(self):
         """测试机构名识别"""
-        results = self.ner.recognize("国开行辽宁分行为该项目提供贷款")
+        results = self.ner.recognize("某某银行某分行为该项目提供贷款")
         orgs = [r for r in results if r.text_type == DetectionType.COMPANY]
         assert len(orgs) >= 1
 
     def test_source_is_ner(self):
         """测试来源标记为ner"""
-        results = self.ner.recognize("张三去了北京")
+        results = self.ner.recognize("某人甲去了北京")
         for r in results:
             assert r.source == "ner"
 
     def test_confidence_range(self):
         """测试置信度在合理范围内"""
-        results = self.ner.recognize("张三去了北京市海淀区")
+        results = self.ner.recognize("某人甲去了北京市海淀区")
         for r in results:
             assert 0.0 <= r.confidence <= 1.0
 
@@ -67,13 +67,13 @@ class TestJiebaNER:
 
     def test_no_duplicates(self):
         """测试不返回重复结果"""
-        results = self.ner.recognize("张三和张三去了北京和北京")
+        results = self.ner.recognize("某人甲和某人甲去了北京和北京")
         texts = [r.text for r in results]
         assert len(texts) == len(set(texts))
 
     def test_real_world_text(self):
-        """测试真实文本（海州煤矿文档片段）"""
-        text = "阜新市已委托中煤科工生态园编制项目方案"
+        """测试真实文本（示例文档片段）"""
+        text = "某市已委托某公司编制项目方案"
         results = self.ner.recognize(text)
         # 应该能识别出至少一个地名或机构名
         assert len(results) >= 1

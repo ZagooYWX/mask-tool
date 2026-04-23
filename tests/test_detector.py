@@ -10,7 +10,7 @@ class TestDetector:
     def setup_method(self):
         lexicon = {
             "company": ["某某建设集团有限公司", "华为技术有限公司"],
-            "person": ["张三"],
+            "person": ["某人甲"],
             "project": ["某某新区基础设施建设项目"],
             "location": ["某某市某某区"],
         }
@@ -68,7 +68,7 @@ class TestDetector:
 
     def test_location_info(self):
         """测试位置信息记录"""
-        results = self.detector.detect("张三", file_path="test.docx")
+        results = self.detector.detect("某人甲", file_path="test.docx")
         assert len(results) == 1
         assert results[0].location.file == "test.docx"
 

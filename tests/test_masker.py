@@ -35,7 +35,7 @@ class TestMasker:
         masker = Masker(TokenGenerator(), irreversible=True)
         results = [
             DetectionResult(
-                text="张三",
+                text="某人甲",
                 text_type=DetectionType.PERSON,
                 source="dictionary",
                 confidence=0.95,
@@ -43,15 +43,15 @@ class TestMasker:
                 status=DetectionStatus.AUTO_MASK,
             ),
         ]
-        masked = masker.mask_text("负责人：张三", results)
-        assert "张三" not in masked
+        masked = masker.mask_text("负责人：某人甲", results)
+        assert "某人甲" not in masked
         assert "***" in masked
 
     def test_hint_only_not_masked(self):
         """测试仅提示的项不被脱敏"""
         results = [
             DetectionResult(
-                text="张三",
+                text="某人甲",
                 text_type=DetectionType.PERSON,
                 source="dictionary",
                 confidence=0.50,
@@ -59,8 +59,8 @@ class TestMasker:
                 status=DetectionStatus.HINT_ONLY,
             ),
         ]
-        masked = self.masker.mask_text("负责人：张三", results)
-        assert "张三" in masked
+        masked = self.masker.mask_text("负责人：某人甲", results)
+        assert "某人甲" in masked
 
     def test_multiple_matches(self):
         """测试多个匹配项"""
@@ -74,7 +74,7 @@ class TestMasker:
                 status=DetectionStatus.AUTO_MASK,
             ),
             DetectionResult(
-                text="张三",
+                text="某人甲",
                 text_type=DetectionType.PERSON,
                 source="dictionary",
                 confidence=0.95,
@@ -82,7 +82,7 @@ class TestMasker:
                 status=DetectionStatus.AUTO_MASK,
             ),
         ]
-        masked = self.masker.mask_text("甲方：某某建设集团有限公司，负责人：张三", results)
+        masked = self.masker.mask_text("甲方：某某建设集团有限公司，负责人：某人甲", results)
         assert "[COMPANY_001]" in masked
         assert "[PERSON_001]" in masked
 
@@ -90,7 +90,7 @@ class TestMasker:
         """测试获取映射关系"""
         results = [
             DetectionResult(
-                text="张三",
+                text="某人甲",
                 text_type=DetectionType.PERSON,
                 source="dictionary",
                 confidence=0.95,
@@ -98,8 +98,8 @@ class TestMasker:
                 status=DetectionStatus.AUTO_MASK,
             ),
         ]
-        self.masker.mask_text("负责人：张三", results)
+        self.masker.mask_text("负责人：某人甲", results)
         mappings = self.masker.get_mappings()
         assert len(mappings) == 1
         assert mappings[0].token == "[PERSON_001]"
-        assert mappings[0].original == "张三"
+        assert mappings[0].original == "某人甲"

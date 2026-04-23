@@ -179,7 +179,7 @@ class JiebaNER(BaseNER):
 
         Args:
             words: [(word, freq, tag), ...] 列表
-                   例如 [("国开行辽宁分行", 10, "nt")]
+                   例如 [("某某银行某分行", 10, "nt")]
         """
         if not self._available:
             return
